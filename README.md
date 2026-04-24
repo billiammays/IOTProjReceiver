@@ -1,40 +1,54 @@
-# ESP32-C6 Stepper Motor Controller (A4988)
+# Differential Pitch-Yaw Stepper Controller
 
-This project drives a stepper motor using an A4988 driver and the ESP32-C6's RMT peripheral. It generates precise pulse trains on hardware to ensure smooth movement without CPU overhead.
+ESP32-C6 firmware controlling two NEMA17-34 stepper motors (A4988 drivers) in a differential pitch-yaw configuration, with cloud control via ESP RainMaker.
 
-## Wiring Diagram
+## Hardware
 
-| ESP32-C6 Pin | A4988 Pin | Description |
-| :--- | :--- | :--- |
-| **GPIO 4** | **STEP** | Step pulse input |
-| **GPIO 5** | **DIR** | Direction control |
-| **GND** | **GND** | Logic ground |
-| **External VCC** | **VMOT** | Motor power (e.g. 12V) |
-| **GND** | **GND (Motor)** | Motor power ground |
+| Signal | GPIO |
+|--------|------|
+| STEP 1 (RMT) | 23 |
+| DIR 1 | 15 |
+| STEP 2 (esp_timer) | 20 |
+| DIR 2 | 21 |
 
-*Note: GPIO 20/21 were avoided as they are the default UART0 console pins.*
+Both motors are driven simultaneously. Motor 1 uses the RMT peripheral; motor 2 uses an esp_timer ISR (the ESP32-C6 has one RMT TX channel).
 
-## Features
-- **RMT v2 Driver**: Uses the latest ESP-IDF RMT driver for pulse generation.
-- **Hardware Precision**: Pulse timing is handled by the RMT hardware.
-- **No Acceleration**: Constant speed movement as requested.
-- **Full Step**: Configured for standard full-step mode.
+**Differential kinematics:**
+```
+m1 = pitch + yaw
+m2 = pitch - yaw   (DIR2 inverted for opposing physical mount)
+```
+
+## Cloud Control
+
+Wi-Fi is provisioned over BLE on first boot using the [ESP RainMaker](https://rainmaker.espressif.com) mobile app. After connecting, write an integer to the `mode` parameter to command motion:
+
+| Value | Action |
+|-------|--------|
+| 0 | Stop |
+| 1 | Yaw left |
+| 2 | Yaw right |
+| 3 | Pitch up |
+| 4 | Pitch down |
+
+Motion is continuous until a new mode is received. Mode changes take effect within one step cycle (~16 ms).
 
 ## Build and Flash
 
-1.  **Set up ESP-IDF**: Ensure you have ESP-IDF v5.0 or later installed and sourced.
-2.  **Set Target**:
-    ```bash
-    idf.py set-target esp32c6
-    ```
-3.  **Build**:
-    ```bash
-    idf.py build
-    ```
-4.  **Flash**:
-    ```bash
-    idf.py flash monitor
-    ```
+```bash
+idf.py set-target esp32c6
+idf.py build
+idf.py flash monitor
+```
 
-## Usage
-The code will move the motor 200 steps forward, wait 1 second, move 200 steps backward, and repeat.
+On first flash, use `idf.py erase-flash` beforehand to clear provisioning state.
+
+## Documentation
+
+Doxygen documentation is configured in `Doxyfile`. Generate with:
+
+```bash
+doxygen Doxyfile
+```
+
+Output: `html/index.html` and `latex/refman.tex`.
