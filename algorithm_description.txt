@@ -1,0 +1,60 @@
+Algorithm Description -- main/main.c
+=====================================
+
+INITIALISATION (app_main)
+--------------------------
+1. NVS flash init -- erases and reinitialises on corruption or version mismatch
+2. Default FreeRTOS event loop created
+3. hw_init -- configures DIR/STEP GPIOs, creates the motor 2 esp_timer, creates
+   and enables the RMT TX channel, pre-builds motor1_step_symbol (single 50%
+   duty-cycle pulse)
+4. motor_task launched before any network activity
+5. app_network_init called before esp_rmaker_node_init -- Rainmaker derives the
+   node ID from the Wi-Fi MAC, which requires the network interface to be up first
+6. RainMaker node, device, and integer mode parameter (0-4) created; write_cb
+   registered as the device write callback
+7. app_network_start blocks until Wi-Fi connected -- BLE provisioning on first
+   boot, stored credentials thereafter
+
+
+CONTINUOUS MOTION LOOP (motor_task)
+------------------------------------
+Runs forever. Each iteration (~16 ms):
+
+1. Read current_mode; if 0, delay 10 ms and repeat
+2. On mode change -- update DIR pins per differential kinematics, wait 5 ms for
+   A4988 settle:
+
+   Mode | Motion     | DIR1 | DIR2
+   -----|------------|------|-----
+     1  | Yaw left   |  1   |  1
+     2  | Yaw right  |  0   |  0
+     3  | Pitch up   |  1   |  0
+     4  | Pitch down |  0   |  1
+
+3. Step -- motor2_start(1) and rmt_transmit fire simultaneously;
+   rmt_tx_wait_all_done then motor2_wait block until both complete
+
+Mode changes take effect within one step cycle.
+
+
+CLOUD COMMAND RECEPTION (write_cb)
+------------------------------------
+- Called by the Rainmaker SDK when mode is written from the app or cloud
+- Validates range [0, 4], writes to current_mode, reports back to cloud
+- No mutex needed -- single word-aligned write on a 32-bit architecture
+
+
+MOTOR 2 STEPPING (motor2_step_cb, motor2_start, motor2_wait)
+--------------------------------------------------------------
+- Motor 2 uses esp_timer instead of RMT -- the ESP32-C6 has only one RMT TX channel
+- motor2_start(n) sets motor2_toggles_left = n x 2 and starts the periodic timer
+- motor2_step_cb (ISR) toggles STEP each period; stops the timer when the counter
+  hits zero
+- motor2_wait spins in 1 ms delays until the counter reaches zero
+
+
+EVENT HANDLING (event_handler, rmaker_event_handler)
+-----------------------------------------------------
+- Purely informational -- logs Rainmaker lifecycle, MQTT, OTA, and provisioning events
+- No influence on motor state

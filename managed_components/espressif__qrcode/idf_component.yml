@@ -1,0 +1,7 @@
+description: QR Code generator
+repository: git://github.com/espressif/idf-extra-components.git
+repository_info:
+  commit_sha: 3117b1e6806738c0271bbd18df17f6d74ec66452
+  path: qrcode
+url: https://github.com/espressif/idf-extra-components/tree/master/qrcode
+version: 0.2.0
